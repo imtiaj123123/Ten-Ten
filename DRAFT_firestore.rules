@@ -1,0 +1,116 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'photoURL', 'email', 'status', 'lastActive']) &&
+             data.keys().size() >= 6 && data.keys().size() <= 7 &&
+             data.uid == request.auth.uid &&
+             data.displayName is string && data.displayName.size() <= 100 &&
+             data.photoURL is string && data.photoURL.size() <= 500 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.status in ['online', 'idle', 'talking', 'offline'] &&
+             data.lastActive == request.time;
+    }
+
+    function isValidFriendship(data) {
+      return data.keys().hasAll(['users', 'status', 'createdAt']) &&
+             data.keys().size() == 3 &&
+             data.users is list && data.users.size() == 2 &&
+             data.users[0] is string && data.users[1] is string &&
+             data.status in ['pending', 'accepted'] &&
+             data.createdAt == request.time;
+    }
+
+    function isValidVoiceClip(data) {
+      return data.keys().hasAll(['senderId', 'receiverId', 'audioUrl', 'duration', 'createdAt', 'played']) &&
+             data.keys().size() == 6 &&
+             data.senderId == request.auth.uid &&
+             data.receiverId is string && data.receiverId.size() <= 128 &&
+             data.audioUrl is string && data.audioUrl.size() <= 1000 &&
+             data.duration is number &&
+             data.createdAt == request.time &&
+             data.played == false;
+    }
+
+    // --- Collections ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (
+        // Searching by email
+        (request.query.limit <= 1 && request.query.filters.size() > 0) ||
+        // Listing friends (not explicitly used in app but good practice)
+        userId == request.auth.uid
+      );
+      
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      
+      allow update: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && (
+        // Action: Update Profile/Status
+        (isValidUser(incoming()) && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'lastActive', 'isTalkingTo', 'displayName', 'photoURL'])
+        ))
+      );
+    }
+
+    match /friendships/{friendshipId} {
+      allow read: if isSignedIn() && request.auth.uid in existing().users;
+      
+      allow create: if isSignedIn() && 
+                    isValidFriendship(incoming()) && 
+                    request.auth.uid in incoming().users;
+      
+      allow update: if isSignedIn() && 
+                    request.auth.uid in existing().users &&
+                    isValidFriendship(incoming()) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+      
+      allow delete: if false; // No deletion in this app version
+    }
+
+    match /voice_clips/{clipId} {
+      allow get: if isSignedIn() && (
+        existing().senderId == request.auth.uid || 
+        existing().receiverId == request.auth.uid
+      );
+      
+      allow list: if isSignedIn() && (
+        resource.data.senderId == request.auth.uid || 
+        resource.data.receiverId == request.auth.uid
+      );
+
+      allow create: if isSignedIn() && 
+                    isValidVoiceClip(incoming()) &&
+                    // Verify receiver exists (Pillar 8 optional but good)
+                    exists(/databases/$(database)/documents/users/$(incoming().receiverId));
+
+      allow update: if isSignedIn() && 
+                    existing().receiverId == request.auth.uid &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['played']) &&
+                    incoming().played == true;
+    }
+  }
+}

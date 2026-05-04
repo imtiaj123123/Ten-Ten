@@ -1,0 +1,8 @@
+{
+  "name": "TenTen Walkie",
+  "description": "A real-time walkie-talkie app for close friends. Push to talk, hear them instantly.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": []
+}

@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public and private user data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "email": { "type": "string" },
+        "status": { "type": "string", "enum": ["online", "idle", "talking", "offline"] },
+        "lastActive": { "type": "string", "format": "date-time" },
+        "isTalkingTo": { "type": "string", "description": "UID of the user being talked to" }
+      },
+      "required": ["uid", "displayName", "email", "status", "lastActive"]
+    },
+    "Friendship": {
+      "title": "Friendship Relationship",
+      "description": "Real-time state of friendship between two users",
+      "type": "object",
+      "properties": {
+        "users": { "type": "array", "description": "Array of the two user UIDs" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["users", "status", "createdAt"]
+    },
+    "VoiceClip": {
+      "title": "Voice Clip",
+      "description": "Metadata for a short audio transmission",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "duration": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "played": { "type": "boolean" }
+      },
+      "required": ["senderId", "receiverId", "audioUrl", "createdAt", "played"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile data"
+    },
+    "/friendships/{friendshipId}": {
+      "schema": "Friendship",
+      "description": "Friendships between users"
+    },
+    "/voice_clips/{clipId}": {
+      "schema": "VoiceClip",
+      "description": "Recent voice clips"
+    }
+  }
+}
